@@ -22,18 +22,11 @@ async function compressPhoto(file) {
 }
 
 const STATUS_LABEL = {
-  SCHEDULED: 'Terjadwal',
-  ARRIVED: 'Tiba',
   WAITING_QC: 'Belum QC',
   QC_IN_PROGRESS: 'Belum QC',
   QC_DONE: 'Sudah QC',
-  UNLOADING: 'Bongkar',
-  FINISHED: 'Selesai',
 }
 
-/**
- * Store untuk layar "Daftar Kendaraan QC" (list per tanggal janji).
- */
 export const useQcListStore = defineStore('qcList', () => {
   const loading = ref(false)
   const errorMessage = ref(null)
@@ -80,12 +73,9 @@ export const useQcListStore = defineStore('qcList', () => {
 })
 
 /**
- * Store untuk layar "Input Metrik QC" (satu IML pada satu waktu).
- * MC, IMP, dan OT semuanya satu nilai per IML, diisi langsung oleh
- * operator. Foto murni dokumentasi (tidak ada nilai per foto lagi).
- *
- * Dipakai sebagai singleton — panggil initialize(noIml) tiap kali
- * masuk ke IML yang berbeda supaya state di-reset dan data dimuat ulang.
+ * Store untuk layar "Input Metrik QC". Field disamakan dengan skema
+ * perusahaan: mc, im (dulu imp), ot, qc_inspector (dulu qc_by — cuma
+ * QCInspector yang diadopsi dari 3 kolom inspector perusahaan).
  */
 export const useQcInputStore = defineStore('qcInput', () => {
   const currentNoIml = ref(null)
@@ -99,12 +89,37 @@ export const useQcInputStore = defineStore('qcInput', () => {
   const iml = ref(null)
 
   const mc = ref('')
-  const imp = ref('')
+  const im = ref('')
   const ot = ref('')
+  const qcInspector = ref('')
+
+  const inspectorOptions = ref([])
+  const searchingInspectors = ref(false)
+  let inspectorSearchToken = 0
+
+  async function searchInspectors(query) {
+    const token = ++inspectorSearchToken
+    searchingInspectors.value = true
+    try {
+      const { data } = await api.get('/qc/inspectors', { params: { q: query } })
+      // Buang hasil kalau sudah ada pencarian yang lebih baru menyusul
+      // (menghindari race condition waktu user ngetik cepat).
+      if (token === inspectorSearchToken) {
+        inspectorOptions.value = data.data
+      }
+    } catch (err) {
+      if (token === inspectorSearchToken) {
+        inspectorOptions.value = []
+      }
+    } finally {
+      if (token === inspectorSearchToken) {
+        searchingInspectors.value = false
+      }
+    }
+  }
 
   const photos = computed(() => iml.value?.photos ?? [])
   const photoCount = computed(() => photos.value.length)
-  // QC yang sudah selesai dikunci: foto tidak boleh ditambah/dihapus lagi.
   const isLocked = computed(() => iml.value?.status === 'QC_DONE')
   const canAddPhoto = computed(() => photoCount.value < MAX_PHOTOS && !isLocked.value)
   const remainingPhotos = computed(() => MAX_PHOTOS - photoCount.value)
@@ -117,12 +132,14 @@ export const useQcInputStore = defineStore('qcInput', () => {
     errorMessage.value = null
     iml.value = null
     mc.value = ''
-    imp.value = ''
+    im.value = ''
     ot.value = ''
+    qcInspector.value = ''
+    inspectorOptions.value = []
   }
 
   async function initialize(noIml) {
-    if (currentNoIml.value === noIml && iml.value) return // sudah dimuat
+    if (currentNoIml.value === noIml && iml.value) return
     currentNoIml.value = noIml
     resetState()
     await fetchLookup()
@@ -134,6 +151,14 @@ export const useQcInputStore = defineStore('qcInput', () => {
     try {
       const { data } = await api.get(`/qc/lookup/${currentNoIml.value}`)
       iml.value = data.data
+      // Kalau IML ini sudah pernah di-submit (QC_DONE), tampilkan nilai yang
+      // sudah tersimpan — bukan field kosong yang cuma di-disable.
+      if (iml.value) {
+        mc.value = iml.value.mc ?? ''
+        im.value = iml.value.im ?? ''
+        ot.value = iml.value.ot ?? ''
+        qcInspector.value = iml.value.qc_inspector ?? ''
+      }
     } catch (err) {
       errorMessage.value = err.response?.data?.message ?? 'Gagal memuat data IML.'
       iml.value = null
@@ -199,8 +224,12 @@ export const useQcInputStore = defineStore('qcInput', () => {
       errorMessage.value = 'Minimal 1 foto dokumentasi wajib diunggah.'
       return false
     }
-    if (mc.value === '' || imp.value === '' || ot.value === '') {
-      errorMessage.value = 'MC, IMP, dan OT wajib diisi.'
+    if (mc.value === '' || im.value === '' || ot.value === '') {
+      errorMessage.value = 'MC, IM, dan OT wajib diisi.'
+      return false
+    }
+    if (!qcInspector.value.trim()) {
+      errorMessage.value = 'Nama QC Inspector wajib diisi.'
       return false
     }
 
@@ -208,8 +237,9 @@ export const useQcInputStore = defineStore('qcInput', () => {
     try {
       const { data } = await api.post(`/qc/${currentNoIml.value}/submit`, {
         mc: mc.value,
-        imp: imp.value,
+        im: im.value,
         ot: ot.value,
+        qc_inspector: qcInspector.value.trim(),
       })
       iml.value = data.data
       return true
@@ -229,8 +259,11 @@ export const useQcInputStore = defineStore('qcInput', () => {
     errorMessage,
     iml,
     mc,
-    imp,
+    im,
     ot,
+    qcInspector,
+    inspectorOptions,
+    searchingInspectors,
     photos,
     photoCount,
     isLocked,
@@ -241,5 +274,6 @@ export const useQcInputStore = defineStore('qcInput', () => {
     uploadPhoto,
     deletePhoto,
     submitQc,
+    searchInspectors,
   }
 })

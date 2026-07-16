@@ -2,13 +2,13 @@
 import { onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useQcInputStore } from '../stores/qc.js'
- 
+
 const props = defineProps({
   noIml: { type: String, required: true },
 })
- 
+
 const emit = defineEmits(['back', 'saved'])
- 
+
 const store = useQcInputStore()
 const {
   loading,
@@ -18,8 +18,11 @@ const {
   errorMessage,
   iml,
   mc,
-  imp,
+  im,
   ot,
+  qcInspector,
+  inspectorOptions,
+  searchingInspectors,
   photos,
   photoCount,
   isLocked,
@@ -27,17 +30,53 @@ const {
   remainingPhotos,
   maxPhotos,
 } = storeToRefs(store)
-const { uploadPhoto, deletePhoto, submitQc } = store
- 
+const { uploadPhoto, deletePhoto, submitQc, searchInspectors } = store
+
 const fileInput = ref(null)
- 
+
+// Dropdown pencarian QC Inspector — teks yang diketik user beda dari nilai
+// final yang tersimpan (qcInspector), supaya user bisa ngetik/filter tanpa
+// langsung mengubah nilai yang mau dikirim sampai dia benar-benar pilih.
+const inspectorQuery = ref('')
+const showInspectorDropdown = ref(false)
+let inspectorSearchTimer = null
+
+function onInspectorInput() {
+  qcInspector.value = ''
+  showInspectorDropdown.value = true
+  clearTimeout(inspectorSearchTimer)
+  inspectorSearchTimer = setTimeout(() => {
+    searchInspectors(inspectorQuery.value.trim())
+  }, 250)
+}
+
+function focusInspectorInput() {
+  showInspectorDropdown.value = true
+  searchInspectors(inspectorQuery.value.trim())
+}
+
+function pickInspector(option) {
+  qcInspector.value = option.nama
+  inspectorQuery.value = option.nama
+  showInspectorDropdown.value = false
+}
+
+function blurInspectorInput() {
+  // Delay dikit supaya klik di opsi dropdown sempat kedaftar sebelum
+  // dropdown-nya ketutup oleh event blur.
+  setTimeout(() => {
+    showInspectorDropdown.value = false
+  }, 150)
+}
+
 onMounted(() => {
   store.initialize(props.noIml)
 })
-// Kalau operator berpindah IML tanpa unmount komponen (misal lewat
-// router-link antar IML), muat ulang data untuk IML yang baru.
 watch(() => props.noIml, (newNoIml) => store.initialize(newNoIml))
- 
+watch(qcInspector, (val) => {
+  if (!showInspectorDropdown.value) inspectorQuery.value = val
+})
+
 function openCamera() {
   if (!canAddPhoto.value) return
   fileInput.value?.click()
@@ -57,7 +96,7 @@ function formatDate(isoDate) {
 async function onFileSelected(e) {
   const file = e.target.files?.[0]
   if (file) await uploadPhoto(file)
-  e.target.value = '' // reset supaya bisa pilih file yang sama lagi kalau perlu
+  e.target.value = ''
 }
 
 async function handleDeletePhoto(photoId) {
@@ -83,7 +122,7 @@ async function handleSubmit() {
       <section class="vehicle-card">
         <div class="vehicle-card-top">
           <div>
-            <div class="nopol">{{ iml.no_kendaraan }}</div>
+            <div class="nopol">{{ iml.no_polisi }}</div>
           </div>
           <span class="badge">{{ iml.nama_material }}</span>
         </div>
@@ -99,11 +138,11 @@ async function handleSubmit() {
         </div>
         <div>
           <div class="label">Vendor</div>
-          <div class="value">{{ iml.id_vendor }} - {{ iml.vendor }}</div>
+          <div class="value">{{ iml.id_supplier }} - {{ iml.vendor }}</div>
         </div>
         <div>
           <div class="label">Material</div>
-          <div class="value">{{ iml.id_material }} – {{ iml.nama_material }}</div>
+          <div class="value">{{ iml.id_jenis_kertas }} – {{ iml.nama_material }}</div>
         </div>
       </section>
 
@@ -133,11 +172,11 @@ async function handleSubmit() {
 
         <div class="metric-row">
           <div class="metric-label">
-            <div class="metric-title">IMP (%)</div>
-            <div class="metric-sub">Impurity Level</div>
+            <div class="metric-title">IM (%)</div>
+            <div class="metric-sub">Impurity</div>
           </div>
           <input
-            v-model="imp"
+            v-model="im"
             type="number"
             step="0.1"
             min="0"
@@ -163,6 +202,41 @@ async function handleSubmit() {
             placeholder="0.0"
             :disabled="isLocked"
           />
+        </div>
+
+        <div class="metric-row metric-row--inspector">
+          <div class="metric-label">
+            <div class="metric-title">QC Inspector</div>
+          </div>
+          <div class="inspector-search">
+            <input
+              v-model="inspectorQuery"
+              type="text"
+              class="metric-input metric-input--text"
+              placeholder="Cari nama..."
+              :disabled="isLocked"
+              @input="onInspectorInput"
+              @focus="focusInspectorInput"
+              @blur="blurInspectorInput"
+            />
+            <ul v-if="showInspectorDropdown && !isLocked" class="inspector-dropdown">
+              <li v-if="searchingInspectors" class="inspector-dropdown-note">Mencari...</li>
+              <li
+                v-else-if="inspectorOptions.length === 0"
+                class="inspector-dropdown-note"
+              >
+                Tidak ada nama cocok.
+              </li>
+              <li
+                v-for="option in inspectorOptions"
+                :key="option.id"
+                class="inspector-option"
+                @mousedown.prevent="pickInspector(option)"
+              >
+                {{ option.nama }}
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -347,8 +421,7 @@ async function handleSubmit() {
   font-size: 11px;
   color: #9ca3af;
 }
-.metric-input,
-.metric-select {
+.metric-input {
   width: 100px;
   text-align: right;
   padding: 8px 10px;
@@ -359,13 +432,50 @@ async function handleSubmit() {
   font-weight: 600;
   color: #1f2937;
 }
-.metric-input:disabled,
-.metric-select:disabled {
+.metric-input--text {
+  width: 160px;
+  text-align: left;
+}
+.metric-input:disabled {
   opacity: 0.6;
 }
-.metric-select {
-  width: 140px;
-  text-align: left;
+
+.metric-row--inspector {
+  align-items: flex-start;
+}
+.inspector-search {
+  position: relative;
+  width: 160px;
+}
+.inspector-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #f3d4d4;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.inspector-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+}
+.inspector-option:hover {
+  background: #fdf1f1;
+}
+.inspector-dropdown-note {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .evidence-header {
