@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useQcInputStore } from '../stores/qc.js'
 
@@ -44,6 +44,7 @@ const fileInput = ref(null)
 // langsung mengubah nilai yang mau dikirim sampai dia benar-benar pilih.
 const inspectorQuery = ref('')
 const showInspectorDropdown = ref(false)
+const inspectorWrapperRef = ref(null)
 let inspectorSearchTimer = null
 
 function onInspectorInput() {
@@ -66,13 +67,24 @@ function pickInspector(option) {
   showInspectorDropdown.value = false
 }
 
-function blurInspectorInput() {
-  // Delay dikit supaya klik di opsi dropdown sempat kedaftar sebelum
-  // dropdown-nya ketutup oleh event blur.
-  setTimeout(() => {
+// Nutup dropdown berdasarkan tap di LUAR komponen ini — bukan berdasarkan
+// blur input. Pola blur+timeout sebelumnya sering gagal di HP: tap pertama
+// di nama sering cuma dianggap "nutup keyboard virtual" oleh OS, jadi
+// pilihan baru kepilih di tap KEDUA (atau butuh Enter). Listener di
+// document ini tidak peduli soal fokus/keyboard sama sekali — dia cuma
+// cek apakah tap-nya kena di dalam wrapper atau tidak.
+function handleDocumentPointerDown(event) {
+  if (inspectorWrapperRef.value && !inspectorWrapperRef.value.contains(event.target)) {
     showInspectorDropdown.value = false
-  }, 150)
+  }
 }
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
+})
 
 onMounted(() => {
   store.initialize(props.noIml)
@@ -293,7 +305,7 @@ async function handleSubmit() {
           <div class="metric-label">
             <div class="metric-title">QC Inspector</div>
           </div>
-          <div class="inspector-search">
+          <div class="inspector-search" ref="inspectorWrapperRef">
             <input
               v-model="inspectorQuery"
               type="text"
@@ -302,7 +314,6 @@ async function handleSubmit() {
               :disabled="isLocked"
               @input="onInspectorInput"
               @focus="focusInspectorInput"
-              @blur="blurInspectorInput"
             />
             <ul v-if="showInspectorDropdown && !isLocked" class="inspector-dropdown">
               <li v-if="searchingInspectors" class="inspector-dropdown-note">Mencari...</li>
@@ -316,7 +327,7 @@ async function handleSubmit() {
                 v-for="option in inspectorOptions"
                 :key="option.id"
                 class="inspector-option"
-                @mousedown.prevent="pickInspector(option)"
+                @click="pickInspector(option)"
               >
                 {{ option.nama }}
               </li>
