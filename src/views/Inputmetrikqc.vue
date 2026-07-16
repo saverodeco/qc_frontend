@@ -93,6 +93,30 @@ function formatDate(isoDate) {
   return `${dd}-${mm}-${yyyy}`
 }
 
+// Sama seperti formatDate, tapi ikut nampilin jam:menit — dipakai buat
+// 4 timestamp proses (check in/out, mulai/selesai bongkar).
+function formatDateTime(isoDate) {
+  if (!isoDate) return '-'
+  const d = new Date(isoDate)
+  const tanggal = formatDate(isoDate)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${tanggal} ${hh}:${min}`
+}
+
+// "Lama di dalam" = selisih Jam Check Out - Jam Check In, ditampilkan
+// dalam format Jam/Menit/Detik seperti di sistem lama.
+function lamaDiDalam(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return '-'
+  const diffMs = new Date(checkOut) - new Date(checkIn)
+  if (diffMs < 0) return '-'
+  const totalDetik = Math.floor(diffMs / 1000)
+  const jam = Math.floor(totalDetik / 3600)
+  const menit = Math.floor((totalDetik % 3600) / 60)
+  const detik = totalDetik % 60
+  return `${String(jam).padStart(2, '0')} Jam ${String(menit).padStart(2, '0')} Menit ${String(detik).padStart(2, '0')} Detik`
+}
+
 async function onFileSelected(e) {
   const file = e.target.files?.[0]
   if (file) await uploadPhoto(file)
@@ -149,6 +173,31 @@ async function handleSubmit() {
       <p v-if="isLocked" class="locked-banner">
         QC untuk IML ini sudah selesai. Data di bawah bersifat baca saja.
       </p>
+
+      <section class="timeline-card">
+        <h2>WAKTU PROSES</h2>
+        <div class="timeline-grid">
+          <div>
+            <div class="label">Jam Check In</div>
+            <div class="value">{{ formatDateTime(iml.jam_check_in) }}</div>
+          </div>
+          <div>
+            <div class="label">Jam Mulai Bongkar</div>
+            <div class="value">{{ formatDateTime(iml.jam_mulai_bongkar) }}</div>
+          </div>
+          <div>
+            <div class="label">Jam Selesai Bongkar</div>
+            <div class="value">{{ formatDateTime(iml.jam_selesai_bongkar) }}</div>
+          </div>
+          <div>
+            <div class="label">Jam Check Out</div>
+            <div class="value">{{ formatDateTime(iml.jam_check_out) }}</div>
+          </div>
+        </div>
+        <div class="timeline-duration">
+          Lama di dalam: <strong>{{ lamaDiDalam(iml.jam_check_in, iml.jam_check_out) }}</strong>
+        </div>
+      </section>
 
       <section class="metrics-section">
         <h2>QC METRICS ENTRY</h2>
@@ -339,6 +388,36 @@ async function handleSubmit() {
   padding: 10px 12px;
   border-radius: 10px;
   margin-bottom: 16px;
+}
+
+.timeline-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.timeline-card h2 {
+  font-size: 12px;
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.03em;
+  margin-bottom: 12px;
+}
+.timeline-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.timeline-duration {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+  font-size: 12px;
+  color: #6b7280;
+}
+.timeline-duration strong {
+  color: #1f2937;
 }
 
 .vehicle-card {
