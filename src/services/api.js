@@ -1,11 +1,15 @@
-import axios from 'axios';
+import axios from 'axios'
 
 const api = axios.create({
-    baseURL: 'http://127.0.0.1:8000/api', // URL Laravel API
-    headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-    },
-});
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+})
 
-export default api;
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API error:', error.response?.status, error.response?.data?.message)
+    return Promise.reject(error)
+  }
+)
+
+export default api
