@@ -23,6 +23,11 @@ const {
   qcInspector,
   inspectorOptions,
   searchingInspectors,
+  jamCheckIn,
+  jamMulaiBongkar,
+  jamSelesaiBongkar,
+  jamCheckOut,
+  savingJam,
   photos,
   photoCount,
   isLocked,
@@ -30,7 +35,7 @@ const {
   remainingPhotos,
   maxPhotos,
 } = storeToRefs(store)
-const { uploadPhoto, deletePhoto, submitQc, searchInspectors } = store
+const { uploadPhoto, deletePhoto, submitQc, searchInspectors, saveJam } = store
 
 const fileInput = ref(null)
 
@@ -176,26 +181,57 @@ async function handleSubmit() {
 
       <section class="timeline-card">
         <h2>WAKTU PROSES</h2>
-        <div class="timeline-grid">
-          <div>
-            <div class="label">Jam Check In</div>
-            <div class="value">{{ formatDateTime(iml.jam_check_in) }}</div>
-          </div>
-          <div>
-            <div class="label">Jam Mulai Bongkar</div>
-            <div class="value">{{ formatDateTime(iml.jam_mulai_bongkar) }}</div>
-          </div>
-          <div>
-            <div class="label">Jam Selesai Bongkar</div>
-            <div class="value">{{ formatDateTime(iml.jam_selesai_bongkar) }}</div>
-          </div>
-          <div>
-            <div class="label">Jam Check Out</div>
-            <div class="value">{{ formatDateTime(iml.jam_check_out) }}</div>
-          </div>
+
+        <div class="timeline-row">
+          <div class="timeline-label">Jam Check In</div>
+          <input v-model="jamCheckIn" type="datetime-local" class="timeline-input" :disabled="isLocked" />
+          <button
+            class="btn-set-jam"
+            :disabled="isLocked || savingJam === 'jam_check_in'"
+            @click="saveJam('jam_check_in')"
+          >
+            {{ savingJam === 'jam_check_in' ? '...' : 'Simpan' }}
+          </button>
         </div>
+
+        <div class="timeline-row">
+          <div class="timeline-label">Jam Mulai Bongkar</div>
+          <input v-model="jamMulaiBongkar" type="datetime-local" class="timeline-input" :disabled="isLocked" />
+          <button
+            class="btn-set-jam"
+            :disabled="isLocked || savingJam === 'jam_mulai_bongkar'"
+            @click="saveJam('jam_mulai_bongkar')"
+          >
+            {{ savingJam === 'jam_mulai_bongkar' ? '...' : 'Simpan' }}
+          </button>
+        </div>
+
+        <div class="timeline-row">
+          <div class="timeline-label">Jam Selesai Bongkar</div>
+          <input v-model="jamSelesaiBongkar" type="datetime-local" class="timeline-input" :disabled="isLocked" />
+          <button
+            class="btn-set-jam"
+            :disabled="isLocked || savingJam === 'jam_selesai_bongkar'"
+            @click="saveJam('jam_selesai_bongkar')"
+          >
+            {{ savingJam === 'jam_selesai_bongkar' ? '...' : 'Simpan' }}
+          </button>
+        </div>
+
+        <div class="timeline-row">
+          <div class="timeline-label">Jam Check Out</div>
+          <input v-model="jamCheckOut" type="datetime-local" class="timeline-input" :disabled="isLocked" />
+          <button
+            class="btn-set-jam"
+            :disabled="isLocked || savingJam === 'jam_check_out'"
+            @click="saveJam('jam_check_out')"
+          >
+            {{ savingJam === 'jam_check_out' ? '...' : 'Simpan' }}
+          </button>
+        </div>
+
         <div class="timeline-duration">
-          Lama di dalam: <strong>{{ lamaDiDalam(iml.jam_check_in, iml.jam_check_out) }}</strong>
+          Lama di dalam: <strong>{{ lamaDiDalam(jamCheckIn, jamCheckOut) }}</strong>
         </div>
       </section>
 
@@ -404,10 +440,47 @@ async function handleSubmit() {
   letter-spacing: 0.03em;
   margin-bottom: 12px;
 }
-.timeline-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.timeline-row:last-of-type {
+  border-bottom: none;
+}
+.timeline-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.timeline-input {
+  border: 1px solid #f3d4d4;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #1f2937;
+  background: #fdf1f1;
+}
+.timeline-input:disabled {
+  opacity: 0.6;
+}
+.btn-set-jam {
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-set-jam:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .timeline-duration {
   margin-top: 12px;

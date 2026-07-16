@@ -93,6 +93,19 @@ export const useQcInputStore = defineStore('qcInput', () => {
   const ot = ref('')
   const qcInspector = ref('')
 
+  const jamCheckIn = ref('')
+  const jamMulaiBongkar = ref('')
+  const jamSelesaiBongkar = ref('')
+  const jamCheckOut = ref('')
+  const savingJam = ref(null) // field key yang lagi disimpan, buat loading state per tombol
+
+  function isoToLocalInput(iso) {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   const inspectorOptions = ref([])
   const searchingInspectors = ref(false)
   let inspectorSearchToken = 0
@@ -136,6 +149,11 @@ export const useQcInputStore = defineStore('qcInput', () => {
     ot.value = ''
     qcInspector.value = ''
     inspectorOptions.value = []
+    jamCheckIn.value = ''
+    jamMulaiBongkar.value = ''
+    jamSelesaiBongkar.value = ''
+    jamCheckOut.value = ''
+    savingJam.value = null
   }
 
   async function initialize(noIml) {
@@ -158,6 +176,10 @@ export const useQcInputStore = defineStore('qcInput', () => {
         im.value = iml.value.im ?? ''
         ot.value = iml.value.ot ?? ''
         qcInspector.value = iml.value.qc_inspector ?? ''
+        jamCheckIn.value = isoToLocalInput(iml.value.jam_check_in)
+        jamMulaiBongkar.value = isoToLocalInput(iml.value.jam_mulai_bongkar)
+        jamSelesaiBongkar.value = isoToLocalInput(iml.value.jam_selesai_bongkar)
+        jamCheckOut.value = isoToLocalInput(iml.value.jam_check_out)
       }
     } catch (err) {
       errorMessage.value = err.response?.data?.message ?? 'Gagal memuat data IML.'
@@ -217,6 +239,39 @@ export const useQcInputStore = defineStore('qcInput', () => {
     }
   }
 
+  async function saveJam(field) {
+    if (isLocked.value) {
+      errorMessage.value = 'QC untuk IML ini sudah selesai, waktu tidak bisa diubah lagi.'
+      return false
+    }
+    const valueMap = {
+      jam_check_in: jamCheckIn,
+      jam_mulai_bongkar: jamMulaiBongkar,
+      jam_selesai_bongkar: jamSelesaiBongkar,
+      jam_check_out: jamCheckOut,
+    }
+    const targetRef = valueMap[field]
+    if (!targetRef || !targetRef.value) {
+      errorMessage.value = 'Isi tanggal & waktu dulu sebelum disimpan.'
+      return false
+    }
+
+    savingJam.value = field
+    errorMessage.value = null
+    try {
+      const { data } = await api.patch(`/qc/${currentNoIml.value}/jam`, {
+        [field]: targetRef.value,
+      })
+      iml.value[field] = data.data[field]
+      return true
+    } catch (err) {
+      errorMessage.value = err.response?.data?.message ?? 'Gagal menyimpan waktu.'
+      return false
+    } finally {
+      savingJam.value = null
+    }
+  }
+
   async function submitQc() {
     errorMessage.value = null
 
@@ -264,6 +319,11 @@ export const useQcInputStore = defineStore('qcInput', () => {
     qcInspector,
     inspectorOptions,
     searchingInspectors,
+    jamCheckIn,
+    jamMulaiBongkar,
+    jamSelesaiBongkar,
+    jamCheckOut,
+    savingJam,
     photos,
     photoCount,
     isLocked,
@@ -275,5 +335,6 @@ export const useQcInputStore = defineStore('qcInput', () => {
     deletePhoto,
     submitQc,
     searchInspectors,
+    saveJam,
   }
 })
