@@ -144,6 +144,40 @@ async function handleDeletePhoto(photoId) {
   if (confirm('Hapus foto ini?')) await deletePhoto(photoId)
 }
 
+// Web app browser tidak punya akses langsung nulis ke galeri device. Web
+// Share API (dukungan luas di Android Chrome & iOS Safari 16.4+) adalah
+// cara paling reliable — munculin share sheet asli dengan opsi "Simpan ke
+// Foto". Kalau tidak didukung (misal browser desktop), fallback ke
+// download biasa (masuk ke folder Download, bukan galeri foto).
+async function saveToGallery(photo) {
+  errorMessage.value = null
+  try {
+    const response = await fetch(photo.url)
+    const blob = await response.blob()
+    const filename = `foto-qc-${photo.id}.jpg`
+    const file = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] })
+      return
+    }
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    // AbortError muncul kalau user batal di share sheet — bukan error asli.
+    if (err?.name !== 'AbortError') {
+      errorMessage.value = 'Gagal menyimpan foto. Coba lagi.'
+    }
+  }
+}
+
 async function handleSubmit() {
   const ok = await submitQc()
   if (ok) emit('saved', iml.value)
@@ -369,6 +403,7 @@ async function handleSubmit() {
         <div class="photo-grid">
           <div v-for="(photo, idx) in photos" :key="photo.id" class="photo-item">
             <img :src="photo.url" :alt="`Foto ${idx + 1}`" />
+            <button class="btn-save-photo" title="Simpan ke galeri" @click="saveToGallery(photo)">⬇</button>
             <button
               v-if="!isLocked"
               class="btn-delete-photo"
@@ -706,6 +741,20 @@ async function handleSubmit() {
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.btn-save-photo {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
 }
