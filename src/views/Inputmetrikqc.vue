@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useQcInputStore } from '../stores/qc.js'
+import JSZip from 'jszip'
 
 const props = defineProps({
   noIml: { type: String, required: true },
@@ -175,6 +176,47 @@ async function saveToGallery(photo) {
     if (err?.name !== 'AbortError') {
       errorMessage.value = 'Gagal menyimpan foto. Coba lagi.'
     }
+  }
+}
+
+const downloadingAll = ref(false)
+const downloadProgress = ref(0)
+
+// Zip semua foto jadi satu file, biar tidak perlu download satu-satu buat
+// backup — terutama kalau fotonya sampai 20.
+async function downloadAllPhotos() {
+  if (!photos.value.length || downloadingAll.value) return
+
+  downloadingAll.value = true
+  downloadProgress.value = 0
+  errorMessage.value = null
+
+  try {
+    const zip = new JSZip()
+
+    for (let i = 0; i < photos.value.length; i++) {
+      const photo = photos.value[i]
+      const response = await fetch(photo.url)
+      if (!response.ok) throw new Error(`Gagal mengunduh foto ${i + 1}`)
+      const blob = await response.blob()
+      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')
+      zip.file(`foto-${String(i + 1).padStart(2, '0')}.${ext}`, blob)
+      downloadProgress.value = i + 1
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(zipBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `foto-qc-${iml.value.no_iml}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    errorMessage.value = 'Gagal membuat file ZIP. Coba lagi.'
+  } finally {
+    downloadingAll.value = false
   }
 }
 
@@ -375,6 +417,16 @@ async function handleSubmit() {
           <h2>EVIDENCE DOCUMENTATION</h2>
           <span class="photo-counter">{{ photoCount }} / {{ maxPhotos }}</span>
         </div>
+
+        <button
+          v-if="photoCount > 0"
+          class="btn-download-all"
+          :disabled="downloadingAll"
+          @click="downloadAllPhotos"
+        >
+          <span v-if="downloadingAll">Mengunduh {{ downloadProgress }}/{{ photoCount }}...</span>
+          <span v-else>⬇ Unduh Semua ({{ photoCount }} foto, ZIP)</span>
+        </button>
 
         <button
           v-if="!isLocked"
@@ -685,6 +737,23 @@ async function handleSubmit() {
   font-size: 12px;
   font-weight: 600;
   color: #b91c1c;
+}
+
+.btn-download-all {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1.5px solid #b91c1c;
+  border-radius: 8px;
+  background: #fff;
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-download-all:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-take-photo {
